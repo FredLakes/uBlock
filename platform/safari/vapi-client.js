@@ -21,10 +21,12 @@
 /******************************************************************************/
 // For non background pages
 
-(function() {
+(function(self) {
     'use strict';
     var vAPI = self.vAPI = self.vAPI || {};
     vAPI.safari = true;
+    vAPI.sessionId = String.fromCharCode(Date.now() % 25 + 97) +
+        Math.random().toString(36).slice(2);
     /******************************************************************************/
     var messagingConnector = function(response) {
         if(!response) {
@@ -58,23 +60,18 @@
         }
     };
     /******************************************************************************/
-    var uniqueId = function() {
-        return Math.random().toString(36).slice(2);
-    };
-    /******************************************************************************/
     // Relevant?
     // https://developer.apple.com/library/safari/documentation/Tools/Conceptual/SafariExtensionGuide/MessagesandProxies/MessagesandProxies.html#//apple_ref/doc/uid/TP40009977-CH14-SW12
     vAPI.messaging = {
         channels: {},
         listeners: {},
         requestId: 1,
-        connectorId: uniqueId(),
         setup: function() {
             this.connector = function(msg) {
                 // messages from the background script are sent to every frame,
-                // so we need to check the connectorId to accept only
+                // so we need to check the vAPI.sessionId to accept only
                 // what is meant for the current context
-                if(msg.name === vAPI.messaging.connectorId || msg.name === 'broadcast') {
+                if(msg.name === vAPI.sessionId || msg.name === 'broadcast') {
                     messagingConnector(msg.message);
                 }
             };
@@ -120,7 +117,7 @@
                             return;
                         }
                         safari.extension.globalPage.contentWindow.vAPI.messaging.onMessage({
-                            name: vAPI.messaging.connectorId,
+                            name: vAPI.sessionId,
                             message: message,
                             target: {
                                 page: {
@@ -131,7 +128,7 @@
                             }
                         });
                     } else {
-                        safari.self.tab.dispatchMessage(vAPI.messaging.connectorId, message);
+                        safari.self.tab.dispatchMessage(vAPI.sessionId, message);
                     }
                 },
                 close: function() {
@@ -183,7 +180,7 @@
         details.parentFrameId = parentFrameId;
         details.timeStamp = Date.now();
         return !(safari.self.tab.canLoad(beforeLoadEvent, details));
-    }
+    };
     var onBeforeLoad = function(e) {
         if(e.url.lastIndexOf("data:", 0) === 0) {
             return;
@@ -208,8 +205,7 @@
     var firstMutation = function() {
         document.removeEventListener("DOMContentLoaded", firstMutation, true);
         firstMutation = false;
-        var randEventName = uniqueId();
-        document.addEventListener(randEventName, function(e) {
+        document.addEventListener(vAPI.sessionId, function(e) {
             if(shouldBlockDetailedRequest(e.detail)) {
                 e.detail.url = false;
             }
@@ -218,7 +214,7 @@
         var tmpScript = "\
 (function() {\
 var block = function(u, t) {\
-var e = new CustomEvent('" + randEventName + "', {\
+var e = new CustomEvent('" + vAPI.sessionId + "', {\
 detail: {\
 url: u,\
 type: t\
@@ -291,5 +287,5 @@ return r;\
         safari.self.tab.setContextMenuEventUserInfo(e, details);
     };
     self.addEventListener("contextmenu", onContextMenu, true);
-})();
+})(this);
 /******************************************************************************/
